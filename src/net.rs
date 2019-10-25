@@ -64,6 +64,8 @@ pub enum MessageType {
     Completedblock(Block),
     Nodevss(VerifiableSS, FE),
     Nodepoint(FE, GE, GE, VerifiableSS),
+    Blockvss(Block, VerifiableSS, FE),
+    Blockpoint(Block, FE, GE, GE, VerifiableSS),
     Roundfailure,
 }
 
