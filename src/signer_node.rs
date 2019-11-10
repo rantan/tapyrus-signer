@@ -2,7 +2,7 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::convert::TryInto;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::Arc;
@@ -12,7 +12,7 @@ use std::{thread, time};
 use bitcoin::{Address, PrivateKey, PublicKey};
 use curv::cryptographic_primitives::secret_sharing::feldman_vss::VerifiableSS;
 use curv::elliptic::curves::traits::*;
-use curv::{BigInt, FE, GE};
+use curv::{FE, GE};
 use multi_party_schnorr::protocols::thresholdsig::bitcoin_schnorr::*;
 use redis::ControlFlow;
 
@@ -35,7 +35,7 @@ pub struct SignerNode<T: TapyrusApi, C: ConnectionManager> {
     stop_signal: Option<Receiver<u32>>,
     master_index: usize,
     round_timer: RoundTimeOutObserver,
-    node_points: HashMap<SignerID, (FE, GE, GE, VerifiableSS)>,
+    node_points: BTreeMap<SignerID, (FE, GE, GE, VerifiableSS)>,
     shared_secrets: SharedSecretMap,
 }
 
@@ -45,20 +45,20 @@ pub struct SharedSecret {
     pub share: FE,
 }
 
-pub type SharedSecretMap = HashMap<SignerID, SharedSecret>;
+pub type SharedSecretMap = BTreeMap<SignerID, SharedSecret>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum NodeState {
     Joining,
     Master {
         block_key: Option<FE>,
-        block_points: HashMap<SignerID, (FE, GE, GE, VerifiableSS)>,
+        block_points: BTreeMap<SignerID, (FE, GE, GE, VerifiableSS)>,
         shared_block_secrets: SharedSecretMap,
         candidate_block: Block,
     },
     Member {
         block_key: Option<FE>,
-        block_points: HashMap<SignerID, (FE, GE, GE, VerifiableSS)>,
+        block_points: BTreeMap<SignerID, (FE, GE, GE, VerifiableSS)>,
         shared_block_secrets: SharedSecretMap,
     },
 }
@@ -84,8 +84,8 @@ impl<T: TapyrusApi, C: ConnectionManager> SignerNode<T, C> {
             stop_signal: None,
             master_index: 0,
             round_timer: RoundTimeOutObserver::new(timer_limit),
-            node_points: HashMap::new(),
-            shared_secrets: HashMap::new(),
+            node_points: BTreeMap::new(),
+            shared_secrets: BTreeMap::new(),
         }
     }
 
@@ -117,8 +117,8 @@ impl<T: TapyrusApi, C: ConnectionManager> SignerNode<T, C> {
         } else {
             NodeState::Member {
                 block_key: None,
-                block_points: HashMap::new(),
-                shared_block_secrets: SharedSecretMap::new(),
+                block_points: BTreeMap::new(),
+                shared_block_secrets: BTreeMap::new(),
             }
         };
         log::info!(
@@ -229,8 +229,8 @@ impl<T: TapyrusApi, C: ConnectionManager> SignerNode<T, C> {
 
         NodeState::Master {
             block_key: None,
-            block_points: HashMap::new(),
-            shared_block_secrets: SharedSecretMap::new(),
+            block_points: BTreeMap::new(),
+            shared_block_secrets: BTreeMap::new(),
             candidate_block: block,
         }
     }
@@ -283,7 +283,11 @@ impl<T: TapyrusApi, C: ConnectionManager> SignerNode<T, C> {
                             "Received Invalid candidate block!!: sender: {:?}",
                             sender_id
                         );
-                        self.current_state.clone()
+                        NodeState::Member {
+                            block_key: None,
+                            block_points: block_points.clone(),
+                            shared_block_secrets: shared_block_secrets.clone(),
+                        }
                     }
                 }
             }
@@ -314,7 +318,7 @@ impl<T: TapyrusApi, C: ConnectionManager> SignerNode<T, C> {
         } else {
             NodeState::Member {
                 block_key: None,
-                block_points: HashMap::new(),
+                block_points: BTreeMap::new(),
                 shared_block_secrets: SharedSecretMap::new(),
             }
         };
@@ -360,8 +364,7 @@ impl<T: TapyrusApi, C: ConnectionManager> SignerNode<T, C> {
                 .collect::<Vec<GE>>();
             let y_sum = sum_point(&y_vec);
 
-            let party_shares: Vec<SharedSecret> =
-                sort_value_by_signer_id::<SharedSecret>(self.shared_secrets.clone());
+            let party_shares: Vec<SharedSecret> = self.shared_secrets.values().cloned().collect();
 
             let shared_keys = key
                 .phase2_verify_vss_construct_keypair(
@@ -424,8 +427,7 @@ impl<T: TapyrusApi, C: ConnectionManager> SignerNode<T, C> {
                 .map(|s| s.1.vss.commitments[0])
                 .collect::<Vec<GE>>();
             let y_sum = sum_point(&y_vec);
-            let party_shares: Vec<SharedSecret> =
-                sort_value_by_signer_id::<SharedSecret>(shared_block_secrets.clone());
+            let party_shares: Vec<SharedSecret> = shared_block_secrets.values().cloned().collect();
             let shared_keys = key
                 .phase2_verify_vss_construct_keypair(
                     &params,
@@ -708,7 +710,8 @@ impl<T: TapyrusApi> NodeParameters<T> {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
+
+    use std::collections::BTreeMap;
     use std::sync::mpsc::{channel, Receiver, Sender};
     use std::sync::{Arc, Mutex};
     use std::thread;
@@ -950,7 +953,7 @@ mod tests {
     fn test_modify_master_index() {
         let initial_state = NodeState::Member {
             block_key: None,
-            block_points: HashMap::new(),
+            block_points: BTreeMap::new(),
             shared_block_secrets: SharedSecretMap::new(),
         };
         let arc_block = safety(get_block(0));
@@ -982,7 +985,7 @@ mod tests {
         let closure: SpyMethod = Box::new(move |_message: Arc<Message>| {});
         let initial_state = NodeState::Member {
             block_key: None,
-            block_points: HashMap::new(),
+            block_points: BTreeMap::new(),
             shared_block_secrets: SharedSecretMap::new(),
         };
         let arc_block = safety(get_block(0));
@@ -1011,7 +1014,7 @@ mod tests {
     fn test_process_completedblock() {
         let initial_state = NodeState::Member {
             block_key: None,
-            block_points: HashMap::new(),
+            block_points: BTreeMap::new(),
             shared_block_secrets: SharedSecretMap::new(),
         };
         let arc_block = safety(get_block(0));
@@ -1058,7 +1061,7 @@ mod tests {
     fn test_process_completedblock_ignore_different_master() {
         let initial_state = NodeState::Member {
             block_key: None,
-            block_points: HashMap::new(),
+            block_points: BTreeMap::new(),
             shared_block_secrets: SharedSecretMap::new(),
         };
         let arc_block = safety(get_block(0));
@@ -1090,9 +1093,8 @@ mod tests {
         use crate::signer_node::tests::create_node;
         use crate::signer_node::{NodeState, SharedSecretMap};
         use bitcoin::Address;
-        use secp256k1::Signature;
         use std::cell::Cell;
-        use std::collections::HashMap;
+        use std::collections::BTreeMap;
 
         struct MockRpc {
             pub results: [GetBlockchainInfoResult; 2],
@@ -1136,7 +1138,7 @@ mod tests {
             let node = create_node(
                 NodeState::Member {
                     block_key: None,
-                    block_points: HashMap::new(),
+                    block_points: BTreeMap::new(),
                     shared_block_secrets: SharedSecretMap::new(),
                 },
                 rpc,
