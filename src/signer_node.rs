@@ -35,7 +35,7 @@ pub struct SignerNode<T: TapyrusApi, C: ConnectionManager> {
     stop_signal: Option<Receiver<u32>>,
     master_index: usize,
     round_timer: RoundTimeOutObserver,
-    node_points: BTreeMap<SignerID, (FE, GE, GE, VerifiableSS)>,
+    node_points: SharedPointMap,
     shared_secrets: SharedSecretMap,
 }
 
@@ -47,18 +47,42 @@ pub struct SharedSecret {
 
 pub type SharedSecretMap = BTreeMap<SignerID, SharedSecret>;
 
+pub trait ToVerifiableSS {
+    fn to_vss(&self) -> Vec<VerifiableSS>;
+}
+
+impl ToVerifiableSS for SharedSecretMap {
+    fn to_vss(&self) -> Vec<VerifiableSS> {
+        self.values().map(|i| i.vss.clone()).collect()
+    }
+}
+
+pub type SharedPointMap = BTreeMap<SignerID, (FE, GE, GE, VerifiableSS)>;
+
+pub trait ToSharedKeys {
+    fn to_shared_keys(&self) -> Vec<SharedKeys>;
+}
+
+impl ToSharedKeys for SharedPointMap {
+    fn to_shared_keys(&self) -> Vec<SharedKeys> {
+        self.values()
+            .map(|i| SharedKeys { x_i: i.0, y: i.1 })
+            .collect()
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum NodeState {
     Joining,
     Master {
         block_key: Option<FE>,
-        block_points: BTreeMap<SignerID, (FE, GE, GE, VerifiableSS)>,
+        block_points: SharedPointMap,
         shared_block_secrets: SharedSecretMap,
         candidate_block: Block,
     },
     Member {
         block_key: Option<FE>,
-        block_points: BTreeMap<SignerID, (FE, GE, GE, VerifiableSS)>,
+        block_points: SharedPointMap,
         shared_block_secrets: SharedSecretMap,
     },
 }

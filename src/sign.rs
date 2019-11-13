@@ -2,8 +2,6 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-use std::collections::BTreeMap;
-
 use curv::arithmetic::traits::*;
 use curv::cryptographic_primitives::secret_sharing::feldman_vss::VerifiableSS;
 use curv::elliptic::curves::traits::*;
@@ -12,8 +10,10 @@ use multi_party_schnorr::protocols::thresholdsig::bitcoin_schnorr::*;
 
 use crate::blockdata::BlockHash;
 use crate::errors::Error;
-use crate::net::SignerID;
+use crate::signer_node::SharedPointMap;
 use crate::signer_node::SharedSecretMap;
+use crate::signer_node::ToSharedKeys;
+use crate::signer_node::ToVerifiableSS;
 
 pub struct Sign;
 
@@ -39,8 +39,8 @@ impl Sign {
     }
 
     pub fn sign(
-        eph_shared_keys: &BTreeMap<SignerID, (FE, GE, GE, VerifiableSS)>,
-        priv_shared_keys: &BTreeMap<SignerID, (FE, GE, GE, VerifiableSS)>,
+        eph_shared_keys: &SharedPointMap,
+        priv_shared_keys: &SharedPointMap,
         eph_shared_secrets: &SharedSecretMap,
         priv_shared_secrets: &SharedSecretMap,
         eph_y_vec: Vec<GE>,
@@ -48,14 +48,8 @@ impl Sign {
         message: BlockHash,
         n: usize,
     ) -> Result<String, Error> {
-        let eph_shared_keys_vec: Vec<SharedKeys> = eph_shared_keys
-            .values()
-            .map(|i| SharedKeys { x_i: i.0, y: i.1 })
-            .collect();
-        let priv_shared_keys_vec: Vec<SharedKeys> = priv_shared_keys
-            .values()
-            .map(|i| SharedKeys { x_i: i.0, y: i.1 })
-            .collect();
+        let eph_shared_keys_vec: Vec<SharedKeys> = eph_shared_keys.to_shared_keys();
+        let priv_shared_keys_vec: Vec<SharedKeys> = priv_shared_keys.to_shared_keys();
 
         let message_slice = message.borrow_inner();
         let local_sig_vec = (0..n)
@@ -67,16 +61,8 @@ impl Sign {
                 )
             })
             .collect::<Vec<LocalSig>>();
-        let key_gen_vss_vec: Vec<VerifiableSS> = priv_shared_secrets
-            .values()
-            .cloned()
-            .map(|i| i.vss.clone())
-            .collect();
-        let eph_vss_vec: Vec<VerifiableSS> = eph_shared_secrets
-            .values()
-            .cloned()
-            .map(|i| i.vss.clone())
-            .collect();
+        let key_gen_vss_vec: Vec<VerifiableSS> = priv_shared_secrets.to_vss();
+        let eph_vss_vec: Vec<VerifiableSS> = eph_shared_secrets.to_vss();
         let parties = (0..n).collect::<Vec<usize>>();
         let verify_local_sig = LocalSig::verify_local_sigs(
             &local_sig_vec,
