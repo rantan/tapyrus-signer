@@ -1051,6 +1051,7 @@ dependencies = [
  "lazy_static 1.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "libc 0.2.66 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.4.8 (registry+https://github.com/rust-lang/crates.io-index)",
+ "matches 0.1.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "multi-party-schnorr 0.3.0 (git+https://github.com/Yamaguchi/multi-party-schnorr?rev=cd92eecc736b7a48bd3a24284f3c3155c7f18179)",
  "redis 0.10.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "secp256k1 0.15.5 (registry+https://github.com/rust-lang/crates.io-index)",

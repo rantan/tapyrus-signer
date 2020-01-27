@@ -12,6 +12,8 @@ extern crate hex;
 extern crate redis;
 #[macro_use]
 extern crate lazy_static;
+#[macro_use]
+extern crate matches;
 
 pub mod blockdata;
 pub mod command_args;
