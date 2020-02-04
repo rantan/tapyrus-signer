@@ -15,6 +15,9 @@ extern crate serde_derive;
 extern crate serde;
 #[macro_use]
 extern crate lazy_static;
+#[macro_use]
+extern crate matches;
+extern crate sha2;
 
 pub mod blockdata;
 pub mod command_args;
